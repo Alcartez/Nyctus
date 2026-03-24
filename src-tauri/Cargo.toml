@@ -1,0 +1,43 @@
+[package]
+name = "nyctus-core"
+version = "0.1.0"
+license = "AGPL-3.0-only"
+description = "Nyctus-core — a visual container sandbox desktop app"
+authors = []
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "nyctus_core_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = []
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+bollard = "0.18"
+futures-util = "0.3"
+zip = "2"
+dirs = "5"
+tar = "0.4.44"
+opener = "0.7"
+# Proprietary dependencies removed
+
+[target."cfg(unix)".dependencies]
+libc = "0.2.182"
+
