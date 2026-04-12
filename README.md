@@ -74,7 +74,7 @@ npm run tauri build
 ## Showcase
 
 https://github.com/user-attachments/assets/c694f1ef-0236-4b9b-b218-9f676ad67f3c
-Create pipelines easily
+
 
 ## Licensing
 
