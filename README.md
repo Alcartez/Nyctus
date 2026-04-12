@@ -31,7 +31,7 @@ Nyctus follows a desktop application architecture with a Rust backend and React 
 
 ### Prerequisites
 
-- Node.js (with npm)
+- Bun 
 - Rust toolchain
 - Podman or Docker
 
@@ -39,10 +39,10 @@ Nyctus follows a desktop application architecture with a Rust backend and React 
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Launch in development mode
-npm run tauri dev
+bun run tauri dev
 ```
 
 Nyctus will detect your container runtime (Podman or Docker), pull the base image if needed, and display the GUI.
@@ -51,8 +51,8 @@ Nyctus will detect your container runtime (Podman or Docker), pull the base imag
 
 ```bash
 # Build frontend and package desktop app
-npm run build
-npm run tauri build
+bun run build
+bun run tauri build
 ```
 
 ## Tech Stack
@@ -70,6 +70,11 @@ npm run tauri build
 - **DataNode** — Mount data files and directories into the pipeline
 - **GuiNode** — Launch GUI applications (Streamlit, Flask, etc.)
 - **GenericNode** — Custom nodes for flexible use cases
+
+## Showcase
+
+https://github.com/user-attachments/assets/c694f1ef-0236-4b9b-b218-9f676ad67f3c
+
 
 ## Licensing
 
