@@ -71,6 +71,11 @@ npm run tauri build
 - **GuiNode** — Launch GUI applications (Streamlit, Flask, etc.)
 - **GenericNode** — Custom nodes for flexible use cases
 
+## Showcase
+
+https://github.com/user-attachments/assets/c694f1ef-0236-4b9b-b218-9f676ad67f3c
+Create pipelines easily
+
 ## Licensing
 
 Nyctus is distributed under a dual-licensing model:
