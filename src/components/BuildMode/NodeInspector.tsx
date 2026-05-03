@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Editor, { useMonaco } from "@monaco-editor/react";
 import Form from "@rjsf/core";
 import validator from "@rjsf/validator-ajv8";
@@ -8,10 +8,11 @@ import type { NycNodeData } from "../../types";
 import { type Node } from "@xyflow/react";
 
 interface NodeInspectorProps {
+    getRfNodes: () => Node<NycNodeData>[];
     setRfNodes: React.Dispatch<React.SetStateAction<Node<NycNodeData>[]>>;
 }
 
-export default function NodeInspector({ setRfNodes }: NodeInspectorProps) {
+export default function NodeInspector({ getRfNodes, setRfNodes }: NodeInspectorProps) {
     const [viewMode, setViewMode] = useState<"VISUAL" | "JSON">("VISUAL");
     const [fullEditorState, setFullEditorState] = useState<{
         isOpen: boolean;
@@ -22,9 +23,8 @@ export default function NodeInspector({ setRfNodes }: NodeInspectorProps) {
 
     const monaco = useMonaco();
 
-    const selectedNode = useAppStore((state) =>
-        state.nodes.find((n) => n.id === state.selectedNodeId)
-    );
+    const selectedNodeId = useAppStore((state) => state.selectedNodeId);
+    const selectedNode = getRfNodes().find((n) => n.id === selectedNodeId);
     const { updateNodeConfig } = useAppStore();
 
     // ── Monaco Schema Injection ──────────────────────────────────────────────
@@ -52,47 +52,47 @@ export default function NodeInspector({ setRfNodes }: NodeInspectorProps) {
         );
     }
 
-    const nodeData = selectedNode.data as NycNodeData;
-    let parsedConfig = {};
+    const nodeData = selectedNode.data;
+    let parsedConfig: Record<string, unknown> = {};
     try {
-        parsedConfig = JSON.parse(nodeData.config);
+        parsedConfig = JSON.parse(nodeData.config) as Record<string, unknown>;
     } catch {
         // invalid JSON string currently in editor — fallback to empty obj for visual renderer
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleVisualChange = (newJsonData: any) => {
+    const handleVisualChange = useCallback((newJsonData: Record<string, unknown>) => {
         const str = JSON.stringify(newJsonData, null, 2);
 
         let newLabel = nodeData.label;
         if (nodeData.nodeType === "EnvGroupNode") {
-            if (newJsonData.label) newLabel = newJsonData.label;
+            if (newJsonData.label) newLabel = newJsonData.label as string;
         } else {
-            if (newJsonData.params?.label) newLabel = newJsonData.params.label;
+            const params = newJsonData.params as Record<string, unknown> | undefined;
+            if (params?.label) newLabel = params.label as string;
         }
 
-        updateNodeConfig(selectedNode.id, str);
-        setRfNodes((nds) => nds.map((n) => n.id === selectedNode.id ? { ...n, data: { ...n.data, config: str, label: newLabel } } : n));
-    };
+        updateNodeConfig(selectedNode!.id, str);
+        setRfNodes((nds) => nds.map((n) => n.id === selectedNode!.id ? { ...n, data: { ...n.data, config: str, label: newLabel } } : n));
+    }, [nodeData, selectedNode, updateNodeConfig, setRfNodes]);
 
-    const handleJsonChange = (value: string | undefined) => {
-        if (value !== undefined) {
+    const handleJsonChange = useCallback((value: string | undefined) => {
+        if (value !== undefined && selectedNode) {
             updateNodeConfig(selectedNode.id, value);
 
-            // Try to excitedly snag the label out of raw JSON too
             let newLabel = nodeData.label;
             try {
-                const parsed = JSON.parse(value);
+                const parsed = JSON.parse(value) as Record<string, unknown>;
                 if (nodeData.nodeType === "EnvGroupNode") {
-                    if (parsed.label) newLabel = parsed.label;
+                    if (parsed.label) newLabel = parsed.label as string;
                 } else {
-                    if (parsed.params?.label) newLabel = parsed.params.label;
+                    const params = parsed.params as Record<string, unknown> | undefined;
+                    if (params?.label) newLabel = params.label as string;
                 }
             } catch { /* ignore */ }
 
             setRfNodes((nds) => nds.map((n) => n.id === selectedNode.id ? { ...n, data: { ...n.data, config: value, label: newLabel } } : n));
         }
-    };
+    }, [nodeData, selectedNode, updateNodeConfig, setRfNodes]);
 
     const handleSaveFullEditor = async () => {
         let finalContent = fullEditorState.tempHash;
@@ -107,11 +107,9 @@ export default function NodeInspector({ setRfNodes }: NodeInspectorProps) {
             }
         }
 
-        const newData = { ...parsedConfig };
-        // @ts-expect-error valid injection
+        const newData = { ...parsedConfig } as Record<string, unknown>;
         if (!newData.params) newData.params = {};
-        // @ts-expect-error valid injection
-        newData.params[fullEditorState.field] = finalContent;
+        (newData.params as Record<string, unknown>)[fullEditorState.field] = finalContent;
         handleVisualChange(newData);
         setFullEditorState({ ...fullEditorState, isOpen: false, osFilePath: undefined });
     };
@@ -194,29 +192,28 @@ export default function NodeInspector({ setRfNodes }: NodeInspectorProps) {
                             <div style={{ marginBottom: 20 }}>
                                 <button
                                     onClick={async () => {
-                                        // @ts-expect-error parsed
-                                        const p = parsedConfig.params || {};
+                                        const params = (parsedConfig.params || {}) as Record<string, unknown>;
                                         let field: "script" | "content" | "entrypoint_script" = "script";
                                         let fileExt = ".txt";
 
                                         if (nodeData.nodeType === "ScriptNode") {
                                             field = "script";
-                                            const env = p.env || "";
+                                            const env = (params.env as string) || "";
                                             if (env.includes("python")) fileExt = ".py";
                                             if (env.includes("node")) fileExt = ".js";
                                             if (env.includes("r")) fileExt = ".R";
                                         } else if (nodeData.nodeType === "DataNode") {
                                             field = "content";
-                                            const fn = p.filename || "";
+                                            const fn = (params.filename as string) || "";
                                             if (fn.includes(".")) fileExt = "." + fn.split(".").pop();
                                         } else if (nodeData.nodeType === "GuiNode" || nodeData.nodeType === "ServiceNode") {
                                             field = "entrypoint_script";
-                                            fileExt = ".py"; // Usually streamlit/http
+                                            fileExt = ".py";
                                         }
 
-                                        const currentContent = p[field] || "";
+                                        const currentContent = (params[field] as string) || "";
                                         const safeLabel = nodeData.label.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                                        const filename = `nyctus_${selectedNode.id}_${safeLabel}${fileExt}`;
+                                        const filename = `nyctus_${selectedNode!.id}_${safeLabel}${fileExt}`;
 
                                         try {
                                             const osPath = await openInOsEditor(filename, currentContent);
@@ -246,19 +243,18 @@ export default function NodeInspector({ setRfNodes }: NodeInspectorProps) {
                             <Form
                                 schema={nodeData.schema}
                                 formData={
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    nodeData.nodeType === "EnvGroupNode" ? parsedConfig : (parsedConfig as any).params || {}
+                                    nodeData.nodeType === "EnvGroupNode"
+                                        ? parsedConfig
+                                        : ((parsedConfig as Record<string, unknown>).params as Record<string, unknown>) || {}
                                 }
                                 onChange={(e) => {
                                     if (nodeData.nodeType === "EnvGroupNode") {
-                                        handleVisualChange(e.formData);
+                                        handleVisualChange(e.formData as Record<string, unknown>);
                                     } else {
-                                        // For standard nodes, ONLY update the nested `params` obj, preserve `type` and `label`
                                         handleVisualChange({ ...parsedConfig, params: e.formData });
                                     }
                                 }}
                                 validator={validator}
-                                // RJSF automatically prevents default submit
                                 onSubmit={() => { }}
                             >
                                 <button type="submit" style={{ display: "none" }} />

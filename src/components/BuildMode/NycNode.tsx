@@ -1,6 +1,7 @@
 import { Handle, Position, useReactFlow, type NodeProps, type Node } from "@xyflow/react";
 import type { NycNodeData, NycNodeType, EnvGroupData } from "../../types";
 import { useAppStore } from "../../store/useAppStore";
+import { useToast } from "../../lib/useToast";
 
 const TYPE_META: Record<NycNodeType, { icon: string; color: string }> = {
     GenericNode: { icon: "⬡", color: "var(--node-generic)" },
@@ -16,6 +17,7 @@ export default function NycNode({ id, data, selected, parentId }: NodeProps) {
     const meta = TYPE_META[nodeData.nodeType] ?? TYPE_META.GenericNode;
     const { deleteElements, setNodes } = useReactFlow();
     const nodes = useAppStore((state) => state.nodes as Node<any>[]);
+    const { showToast } = useToast();
 
     const parentNode = parentId ? nodes.find((n) => n.id === parentId) as Node<EnvGroupData> | undefined : undefined;
 
@@ -34,7 +36,9 @@ export default function NycNode({ id, data, selected, parentId }: NodeProps) {
     try {
         const cfg = JSON.parse(nodeData.config || "{}");
         description = cfg.params?.description || cfg.description || "";
-    } catch { /* ignore */ }
+    } catch (e) {
+        showToast(`Failed to parse node config: ${e}`, "error");
+    }
 
     const handleUnassign = (e: React.MouseEvent) => {
         e.stopPropagation();

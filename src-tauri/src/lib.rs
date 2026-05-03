@@ -1,6 +1,7 @@
 mod container;
 mod nyc;
 mod preflight;
+mod pipeline;
 // Proprietary modules removed
 
 use bollard::Docker;
@@ -8,6 +9,7 @@ use preflight::{check_runtime_available, runtime_socket_uri, RuntimeStatus};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
+use tracing_subscriber::fmt;
 
 // ── App State ────────────────────────────────────────────────────────────────
 
@@ -164,6 +166,17 @@ fn load_nyc(src_path: String) -> Result<nyc::LoadedProject, String> {
     nyc::load_nyc(&src_path)
 }
 
+// ── Commands: Pipeline ─────────────────────────────────────────────────────
+
+#[tauri::command]
+fn build_pipeline_config(
+    nodes: Vec<pipeline::Node>,
+    edges: Vec<pipeline::Edge>,
+    selected_script: Option<String>,
+) -> Result<pipeline::PipelineConfig, String> {
+    pipeline::build_pipeline_config(&nodes, &edges, selected_script.as_deref())
+}
+
 // ── Commands: OS External Editor ─────────────────────────────────────────────
 
 #[tauri::command]
@@ -195,6 +208,9 @@ fn read_os_file(path: String) -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize tracing subscriber for logging
+    fmt::init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
@@ -215,6 +231,7 @@ pub fn run() {
             load_nyc,
             open_in_os_editor,
             read_os_file,
+            build_pipeline_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running nyctus-core");

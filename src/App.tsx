@@ -8,6 +8,9 @@ import NavBar from "./components/NavBar/NavBar";
 import SetupWizard from "./components/SetupWizard/SetupWizard";
 import BuildModeLayout from "./components/BuildMode/BuildModeLayout";
 import ExecuteModeLayout from "./components/ExecuteMode/ExecuteModeLayout";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { ToastProvider } from "./lib/useToast";
+import Toast from "./components/Toast";
 
 export default function App() {
   const {
@@ -73,7 +76,10 @@ export default function App() {
           environment_yaml: state.environmentYaml,
           src_files: {},
         };
-        await saveNyc(payload, dest).catch(console.error);
+        const { showToast } = (await import("./lib/useToast")).useToast();
+        await saveNyc(payload, dest).catch((err) => {
+          showToast(`Failed to save project: ${err}`, "error");
+        });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,22 +94,27 @@ export default function App() {
   const needsSetup = runtimeKind === null;
 
   return (
-    <div className="app-shell">
-      <NavBar />
-      <div className="app-body">
-        {needsSetup ? (
-          <SetupWizard />
-        ) : (
-          <>
-            <div style={{ display: appMode === "BUILD" ? "flex" : "none", flex: 1, minWidth: 0 }}>
-              <BuildModeLayout />
-            </div>
-            <div style={{ display: appMode === "EXECUTE" ? "flex" : "none", flex: 1, minWidth: 0, flexDirection: "column" }}>
-              <ExecuteModeLayout />
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+    <ErrorBoundary>
+      <ToastProvider>
+        <Toast />
+        <div className="app-shell">
+          <NavBar />
+          <div className="app-body">
+            {needsSetup ? (
+              <SetupWizard />
+            ) : (
+              <>
+                <div style={{ display: appMode === "BUILD" ? "flex" : "none", flex: 1, minWidth: 0 }}>
+                  <BuildModeLayout />
+                </div>
+                <div style={{ display: appMode === "EXECUTE" ? "flex" : "none", flex: 1, minWidth: 0, flexDirection: "column" }}>
+                  <ExecuteModeLayout />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useRef, useEffect } from "react";
 import {
     ReactFlow,
     Background,
@@ -9,6 +9,8 @@ import {
     useEdgesState,
     type Connection,
     type Node,
+    type NodeChange,
+    type EdgeChange,
     BackgroundVariant,
     useReactFlow,
     ReactFlowProvider,
@@ -22,11 +24,19 @@ import EnvGroupNode from "./EnvGroupNode";
 import Toolbox, { TOOLBOX_ITEMS, type EnvGroupPreset } from "./Toolbox";
 import NodeInspector from "./NodeInspector";
 import { SCHEMA_MAP } from "../../lib/schemas";
+import { useAutoSave } from "../../hooks/useAutoSave";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const NODE_TYPES: Record<string, React.ComponentType<any>> = { NycNode, EnvGroupNode };
+const NODE_TYPES = { NycNode, EnvGroupNode };
 
 let nodeCounter = 0;
+
+/** Helper to extract absolute position from a node during drag events */
+function getNodeAbsolutePosition(node: Node): { x: number; y: number } {
+    const n = node as Node & { positionAbsolute?: { x: number; y: number }; measured?: { positionAbsolute?: { x: number; y: number } } };
+    const abs = n.measured?.positionAbsolute ?? n.positionAbsolute;
+    if (abs) return { x: abs.x, y: abs.y };
+    return node.position;
+}
 
 /** Returns the group node whose bounds contain the given position, if any. */
 function findParentGroup(
@@ -34,9 +44,8 @@ function findParentGroup(
     pos: { x: number; y: number }
 ): Node | undefined {
     return groups.find((g) => {
-        // Use actively measured width/height if available, otherwise style as fallback
-        const w = (g.measured?.width ?? (g.style?.width as number)) ?? 320;
-        const h = (g.measured?.height ?? (g.style?.height as number)) ?? 200;
+        const w = (g.measured?.width ?? g.width ?? 320);
+        const h = (g.measured?.height ?? g.height ?? 200);
         return (
             pos.x >= g.position.x &&
             pos.x <= g.position.x + w &&
@@ -48,101 +57,132 @@ function findParentGroup(
 
 function BuildModeLayoutInner() {
     const {
-        nodes, edges, selectedNodeId,
-        setNodes, setEdges, setSelectedNodeId,
+        nodes: storeNodes,
+        edges: storeEdges,
+        selectedNodeId,
+        setNodes: setStoreNodes,
+        setEdges: setStoreEdges,
+        setSelectedNodeId,
     } = useAppStore();
 
-    const [rfNodes, setRfNodes, onNodesChange] = useNodesState(nodes as Node<NycNodeData>[]);
-    const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(edges);
+    // Enable auto-save every 30 seconds
+    useAutoSave(30000);
+
+    const [rfNodes, setRfNodes, onNodesChangeBase] = useNodesState(storeNodes);
+    const [rfEdges, setRfEdges, onEdgesChangeBase] = useEdgesState(storeEdges);
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, getNodes, getEdges, undo, redo } = useReactFlow();
 
-    // ── Sync Zustand to ReactFlow (e.g., on Load) ────────────────────────────
+    // Keyboard shortcuts for undo/redo
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    redo();
+                } else {
+                    e.preventDefault();
+                    undo();
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo]);
+
+    // Sync store → ReactFlow only on load (when lengths differ)
     React.useEffect(() => {
-        // Only override rfNodes if the arrays are different lengths (like on Load/Delete)
-        // This prevents ReactFlow from stuttering when it updates coordinates locally
-        if (nodes.length !== rfNodes.length) {
-            setRfNodes(nodes as Node<NycNodeData>[]);
+        if (storeNodes.length !== rfNodes.length) {
+            setRfNodes(storeNodes);
         }
-    }, [nodes, setRfNodes, rfNodes.length]);
+    }, [storeNodes, setRfNodes]);
 
     React.useEffect(() => {
-        if (edges.length !== rfEdges.length) {
-            setRfEdges(edges);
+        if (storeEdges.length !== rfEdges.length) {
+            setRfEdges(storeEdges);
         }
-    }, [edges, setRfEdges, rfEdges.length]);
+    }, [storeEdges, setRfEdges]);
 
-    const syncNodes = useCallback((n: Node[]) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setRfNodes(n as any); setNodes(n as any);
-    }, [setRfNodes, setNodes]);
+    // Expose getter for NodeInspector to read current nodes
+    const getRfNodes = useCallback(() => getNodes() as Node<NycNodeData>[], [getNodes]);
+
+    // ── Sync ReactFlow → Zustand via onChange callbacks ──────────────────────
+    const onNodesChange = useCallback(
+        (changes: NodeChange[]) => {
+            onNodesChangeBase(changes);
+            // Sync to store after ReactFlow processes the change
+            requestAnimationFrame(() => setStoreNodes(getNodes() as Node<NycNodeData>[]));
+        },
+        [onNodesChangeBase, setStoreNodes, getNodes]
+    );
+
+    const onEdgesChange = useCallback(
+        (changes: EdgeChange[]) => {
+            onEdgesChangeBase(changes);
+            requestAnimationFrame(() => setStoreEdges(getEdges()));
+        },
+        [onEdgesChangeBase, setStoreEdges, getEdges]
+    );
 
     const onConnect = useCallback(
-        (params: Connection) => setRfEdges((eds) => { const next = addEdge(params, eds); setEdges(next); return next; }),
-        [setRfEdges, setEdges]
+        (params: Connection) => setRfEdges((eds) => {
+            const next = addEdge(params, eds);
+            setStoreEdges(next);
+            return next;
+        }),
+        [setRfEdges, setStoreEdges]
     );
 
     const onEdgesDelete = useCallback(
         (deletedEdges: typeof rfEdges) => {
             setRfEdges((eds) => {
                 const next = eds.filter(e => !deletedEdges.find(d => d.id === e.id));
-                setEdges(next);
+                setStoreEdges(next);
                 return next;
             });
         },
-        [setRfEdges, setEdges]
+        [setRfEdges, setStoreEdges]
     );
 
     const onNodesDelete = useCallback(
         (deletedNodes: Node[]) => {
             setRfNodes((nds) => {
                 const next = nds.filter((n) => !deletedNodes.find((d) => d.id === n.id));
-                // Sync to global store
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                setNodes(next as any);
+                setStoreNodes(next as Node<NycNodeData>[]);
                 return next;
             });
-            // If the deleted node is currently selected, clear selection
             const isSelectedDeleted = deletedNodes.find((d) => d.id === selectedNodeId);
             if (isSelectedDeleted) {
                 setSelectedNodeId(null);
             }
         },
-        [setRfNodes, setNodes, selectedNodeId, setSelectedNodeId]
+        [setRfNodes, setStoreNodes, selectedNodeId, setSelectedNodeId]
     );
 
     // ── Drag-into-group: auto-parent nodes when dropped inside an EnvGroup ──────
     const onNodeDragStop = useCallback((_e: React.MouseEvent, node: Node) => {
-        // EnvGroups cannot be placed inside other EnvGroups
         if (node.type === "EnvGroupNode") {
             document.querySelectorAll(".env-group--drag-target").forEach(el => el.classList.remove("env-group--drag-target"));
             return;
         }
 
-        const groups = rfNodes.filter((n) => n.type === "EnvGroupNode" && n.id !== node.id);
-        
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const anyNode = node as any;
-        const absX = anyNode.measured?.positionAbsolute?.x ?? anyNode.positionAbsolute?.x ?? node.position.x;
-        const absY = anyNode.measured?.positionAbsolute?.y ?? anyNode.positionAbsolute?.y ?? node.position.y;
-        
+        const groups = getNodes().filter((n) => n.type === "EnvGroupNode" && n.id !== node.id);
+
+        const { x: absX, y: absY } = getNodeAbsolutePosition(node);
+
         const center = { x: absX + 80, y: absY + 20 };
         const parentGroup = findParentGroup(groups, center);
 
-        // Clear hover states
         document.querySelectorAll(".env-group--drag-target").forEach(el => el.classList.remove("env-group--drag-target"));
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (setRfNodes as any)((nds: Node[]) => {
+        setRfNodes((nds) => {
             const updated = nds.map((n) => {
                 if (n.id !== node.id) return n;
 
                 const currentParentId = n.parentId;
                 const newParentId = parentGroup ? parentGroup.id : undefined;
 
-                if (currentParentId === newParentId) {
-                    return n;
-                }
+                if (currentParentId === newParentId) return n;
 
                 if (newParentId && parentGroup) {
                     return {
@@ -161,42 +201,26 @@ function BuildModeLayoutInner() {
                         parentId: undefined,
                         extent: undefined,
                         zIndex: 0,
-                        position: {
-                            x: absX,
-                            y: absY,
-                        },
+                        position: { x: absX, y: absY },
                     };
                 }
             });
-            setNodes(updated as any);
+            setStoreNodes(updated as Node<NycNodeData>[]);
             return updated;
         });
-    }, [rfNodes, setRfNodes, setNodes]);
-
-    // ── Global Drag Stop (Sync coordinates to Zustand) ───────────────────────
-    // Whenever *any* node stops dragging (whether it's an EnvGroup moving its children, 
-    // or a single node just changing position), flush the final ReactFlow coordinate state 
-    // into the global Zustand store so Save works properly.
-    const onNodeDragStopGlobal = useCallback(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setNodes(rfNodes as any);
-    }, [rfNodes, setNodes]);
+    }, [getNodes, setRfNodes, setStoreNodes]);
 
     // ── Drag highlight: glow when hovering over an EnvGroup ──────────────────────
     const onNodeDrag = useCallback((_e: React.MouseEvent, node: Node) => {
         if (node.type === "EnvGroupNode") return;
 
-        const groups = rfNodes.filter((n) => n.type === "EnvGroupNode" && n.id !== node.id);
-        
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const anyNode = node as any;
-        const absX = anyNode.measured?.positionAbsolute?.x ?? anyNode.positionAbsolute?.x ?? node.position.x;
-        const absY = anyNode.measured?.positionAbsolute?.y ?? anyNode.positionAbsolute?.y ?? node.position.y;
-        
+        const groups = getNodes().filter((n) => n.type === "EnvGroupNode" && n.id !== node.id);
+
+        const { x: absX, y: absY } = getNodeAbsolutePosition(node);
+
         const center = { x: absX + 80, y: absY + 20 };
         const parentGroup = findParentGroup(groups, center);
 
-        // Clear all previous hover states directly via DOM to avoid React re-renders while dragging
         document.querySelectorAll(".env-group--drag-target").forEach(el => {
             if (el.parentElement?.getAttribute("data-id") !== parentGroup?.id) {
                 el.classList.remove("env-group--drag-target");
@@ -209,21 +233,19 @@ function BuildModeLayoutInner() {
                 el.classList.add("env-group--drag-target");
             }
         }
-    }, [rfNodes]);
+    }, [getNodes]);
 
     // ── Drop from toolbox ────────────────────────────────────────────────────────
     const onDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
 
-        // Regular node drop
         const nodeType = e.dataTransfer.getData("application/nyctus-node") as NycNodeType;
         if (nodeType) {
             const meta = TOOLBOX_ITEMS.find((i) => i.type === nodeType)!;
             nodeCounter++;
             const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
 
-            // Auto-parent if dropped over a group
-            const groups = rfNodes.filter((n) => n.type === "EnvGroupNode");
+            const groups = getNodes().filter((n) => n.type === "EnvGroupNode");
             const parentGroup = findParentGroup(groups, pos);
 
             const newNode: Node<NycNodeData> = {
@@ -242,16 +264,19 @@ function BuildModeLayoutInner() {
                     config: JSON.stringify({ type: nodeType, label: `${meta.label} ${nodeCounter}`, params: {} }, null, 2),
                 },
             };
-            syncNodes([...rfNodes, newNode]);
+            setRfNodes((nds) => {
+                const next = [...nds, newNode];
+                setStoreNodes(next);
+                return next;
+            });
             return;
         }
 
-        // EnvGroup drop
         const rawPreset = e.dataTransfer.getData("application/nyctus-env-group");
         if (rawPreset) {
             addEnvGroupAtPos(JSON.parse(rawPreset) as EnvGroupPreset, e.clientX, e.clientY);
         }
-    }, [rfNodes, syncNodes, screenToFlowPosition]);
+    }, [getNodes, setRfNodes, setStoreNodes, screenToFlowPosition]);
 
     const addEnvGroupAtPos = useCallback((preset: EnvGroupPreset, clientX = 300, clientY = 200) => {
         nodeCounter++;
@@ -271,9 +296,12 @@ function BuildModeLayoutInner() {
             },
             zIndex: -1,
         };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        syncNodes([...rfNodes, newGroup as any]);
-    }, [rfNodes, syncNodes, screenToFlowPosition]);
+        setRfNodes((nds) => {
+            const next = [...nds, newGroup as Node];
+            setStoreNodes(next as Node<NycNodeData>[]);
+            return next;
+        });
+    }, [setRfNodes, setStoreNodes, screenToFlowPosition]);
 
     const onNodeClick = useCallback((_: React.MouseEvent, node: Node<NycNodeData>) => {
         setSelectedNodeId(node.id);
@@ -304,7 +332,11 @@ function BuildModeLayoutInner() {
                                     config: JSON.stringify({ type, label: `${meta.label} ${nodeCounter}`, params: {} }, null, 2),
                                 },
                             };
-                            syncNodes([...rfNodes, newNode]);
+                            setRfNodes((nds) => {
+                                const next = [...nds, newNode];
+                                setStoreNodes(next);
+                                return next;
+                            });
                         }}
                         onAddEnvGroup={(preset) => addEnvGroupAtPos(preset, 400, 250)}
                     />
@@ -334,10 +366,7 @@ function BuildModeLayoutInner() {
                                     onConnect={onConnect}
                                     onNodeClick={onNodeClick}
                                     onNodeDrag={onNodeDrag}
-                                    onNodeDragStop={(e, node) => {
-                                        onNodeDragStop(e, node);
-                                        onNodeDragStopGlobal();
-                                    }}
+                                    onNodeDragStop={onNodeDragStop}
                                     onPaneClick={() => setSelectedNodeId(null)}
                                     fitView
                                     style={{ background: "var(--bg-base)" }}
@@ -348,6 +377,10 @@ function BuildModeLayoutInner() {
                                         style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)" }}
                                         nodeColor={(n) => n.type === "EnvGroupNode" ? "rgba(99,102,241,0.3)" : "var(--brand)"}
                                     />
+                                    <Panel position="top-right" style={{ display: "flex", gap: 4 }}>
+                                        <button onClick={() => undo()} title="Undo (Ctrl+Z)" style={{ padding: "4px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border-default)", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>↩ Undo</button>
+                                        <button onClick={() => redo()} title="Redo (Ctrl+Shift+Z)" style={{ padding: "4px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border-default)", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>↪ Redo</button>
+                                    </Panel>
                                 </ReactFlow>
                             </div>
                         </Panel>
@@ -355,7 +388,7 @@ function BuildModeLayoutInner() {
                         <Separator style={{ height: 1, background: "var(--border-subtle)", cursor: "row-resize" }} />
 
                         <Panel defaultSize="30%" minSize="20%">
-                            <NodeInspector setRfNodes={setRfNodes} />
+                            <NodeInspector getRfNodes={getRfNodes} setRfNodes={setRfNodes} />
                         </Panel>
                     </Group>
                 </Panel>
@@ -377,20 +410,16 @@ function BuildModeLayoutInner() {
                                     </div>
                                     <div>
                                         <div className="text-muted text-sm">Type</div>
-                                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                        <div style={{ fontSize: 12, marginTop: 2 }}>{(selectedNode.data as any).nodeType ?? (selectedNode.data as any).envType ?? selectedNode.type}</div>
+                                        <div style={{ fontSize: 12, marginTop: 2 }}>{selectedNode.data.nodeType ?? selectedNode.data.envType ?? selectedNode.type}</div>
                                     </div>
                                     <div>
                                         <div className="text-muted text-sm">Label</div>
-                                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                        <div style={{ fontSize: 12, marginTop: 2 }}>{(selectedNode.data as any).label}</div>
+                                        <div style={{ fontSize: 12, marginTop: 2 }}>{selectedNode.data.label}</div>
                                     </div>
-                                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                    {(selectedNode.data as any).parentId && (
+                                    {selectedNode.parentId && (
                                         <div>
                                             <div className="text-muted text-sm">Environment</div>
-                                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                            <div style={{ fontSize: 12, marginTop: 2, color: "var(--accent-cyan)" }}>{(selectedNode as any).parentId}</div>
+                                            <div style={{ fontSize: 12, marginTop: 2, color: "var(--accent-cyan)" }}>{selectedNode.parentId}</div>
                                         </div>
                                     )}
                                 </div>

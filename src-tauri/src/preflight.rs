@@ -1,19 +1,23 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export_to = "../src/types/generated/preflight.ts")]
 pub enum RuntimeKind {
     Podman,
     Docker,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export_to = "../src/types/generated/preflight.ts")]
 pub enum RuntimeStatus {
     Running(RuntimeKind),
     StoppedButInstalled(RuntimeKind),
     NotInstalled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export_to = "../src/types/generated/preflight.ts")]
 #[allow(dead_code)]
 pub enum GpuStatus {
     Available,
@@ -102,5 +106,76 @@ pub fn runtime_socket_uri(kind: &RuntimeKind) -> String {
             RuntimeKind::Podman => format!("unix:///{}/podman/podman.sock", xdg),
             RuntimeKind::Docker => "unix:///var/run/docker.sock".to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_runtime_status_variants() {
+        let running_podman = RuntimeStatus::Running(RuntimeKind::Podman);
+        let running_docker = RuntimeStatus::Running(RuntimeKind::Docker);
+        let stopped_podman = RuntimeStatus::StoppedButInstalled(RuntimeKind::Podman);
+        let stopped_docker = RuntimeStatus::StoppedButInstalled(RuntimeKind::Docker);
+        let not_installed = RuntimeStatus::NotInstalled;
+
+        // Test equality
+        assert_eq!(running_podman, RuntimeStatus::Running(RuntimeKind::Podman));
+        assert_eq!(running_docker, RuntimeStatus::Running(RuntimeKind::Docker));
+        assert_ne!(running_podman, running_docker);
+        assert_ne!(stopped_podman, not_installed);
+    }
+
+    #[test]
+    fn test_runtime_kind_variants() {
+        assert_eq!(RuntimeKind::Podman, RuntimeKind::Podman);
+        assert_eq!(RuntimeKind::Docker, RuntimeKind::Docker);
+        assert_ne!(RuntimeKind::Podman, RuntimeKind::Docker);
+    }
+
+    #[test]
+    fn test_gpu_status_variants() {
+        let available = GpuStatus::Available;
+        let unavailable = GpuStatus::Unavailable;
+        let toolkit_missing = GpuStatus::ToolkitMissing;
+
+        assert_eq!(available, GpuStatus::Available);
+        assert_ne!(available, unavailable);
+        assert_ne!(unavailable, toolkit_missing);
+    }
+
+    #[test]
+    fn test_runtime_socket_uri_windows() {
+        // These tests run on the host OS, so we test the logic conditionally
+        let podman_uri = runtime_socket_uri(&RuntimeKind::Podman);
+        let docker_uri = runtime_socket_uri(&RuntimeKind::Docker);
+
+        // Just verify they return non-empty strings
+        assert!(!podman_uri.is_empty());
+        assert!(!docker_uri.is_empty());
+
+        #[cfg(target_os = "windows")]
+        {
+            assert!(podman_uri.contains("npipe"));
+            assert!(docker_uri.contains("npipe"));
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(podman_uri.contains("unix://"));
+            assert!(docker_uri.contains("unix://"));
+        }
+    }
+
+    #[test]
+    fn test_runtime_status_serialization() {
+        let status = RuntimeStatus::Running(RuntimeKind::Podman);
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("Running") || json.contains("Podman"));
+
+        let deserialized: RuntimeStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(status, deserialized);
     }
 }

@@ -9,26 +9,30 @@ use futures_util::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{AppHandle, Emitter};
+use ts_rs::TS;
 
 const BASE_IMAGE: &str = "docker.io/alcartez/nyctus-os:latest";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "../src/types/generated/container.ts")]
 pub struct VolumeMount {
     pub host_path: String,
     pub container_path: String,
     pub read_only: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "../src/types/generated/container.ts")]
 pub struct PortRule {
     pub host_port: u16,
     pub container_port: u16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "../src/types/generated/container.ts")]
 pub struct EnvTreeNode {
     pub env_type: String,
     pub env_name: Option<String>,
@@ -38,7 +42,8 @@ pub struct EnvTreeNode {
     pub children: Option<Vec<EnvTreeNode>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "../src/types/generated/container.ts")]
 pub struct DeployConfig {
     /// Container image. Defaults to "debian:latest".
     pub image: Option<String>,
@@ -54,7 +59,8 @@ pub struct DeployConfig {
     pub env_tree: Option<EnvTreeNode>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "../src/types/generated/container.ts")]
 pub struct LogPayload {
     pub line: String,
     pub stream_type: String, // "stdout" | "stderr"
@@ -269,4 +275,164 @@ fn uuid_short() -> String {
         .unwrap_or_default()
         .subsec_nanos();
     format!("{:08x}", t)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_volume_mount_creation() {
+        let vol = VolumeMount {
+            host_path: "/host/path".to_string(),
+            container_path: "/container/path".to_string(),
+            read_only: true,
+        };
+
+        assert_eq!(vol.host_path, "/host/path");
+        assert_eq!(vol.container_path, "/container/path");
+        assert!(vol.read_only);
+    }
+
+    #[test]
+    fn test_volume_mount_serialization() {
+        let vol = VolumeMount {
+            host_path: "/home/user/data".to_string(),
+            container_path: "/data".to_string(),
+            read_only: false,
+        };
+
+        let json = serde_json::to_string(&vol).unwrap();
+        let deserialized: VolumeMount = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(vol.host_path, deserialized.host_path);
+        assert_eq!(vol.container_path, deserialized.container_path);
+        assert_eq!(vol.read_only, deserialized.read_only);
+    }
+
+    #[test]
+    fn test_port_rule_creation() {
+        let port = PortRule {
+            host_port: 8080,
+            container_port: 80,
+        };
+
+        assert_eq!(port.host_port, 8080);
+        assert_eq!(port.container_port, 80);
+    }
+
+    #[test]
+    fn test_port_rule_serialization() {
+        let port = PortRule {
+            host_port: 3000,
+            container_port: 3000,
+        };
+
+        let json = serde_json::to_string(&port).unwrap();
+        let deserialized: PortRule = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(port.host_port, deserialized.host_port);
+        assert_eq!(port.container_port, deserialized.container_port);
+    }
+
+    #[test]
+    fn test_deploy_config_defaults() {
+        let config = DeployConfig {
+            image: None,
+            volumes: vec![],
+            port_bindings: vec![],
+            memory_limit_mb: None,
+            use_gpu: false,
+            cmd: None,
+            env_tree: None,
+        };
+
+        assert!(config.image.is_none());
+        assert!(config.volumes.is_empty());
+        assert!(!config.use_gpu);
+    }
+
+    #[test]
+    fn test_deploy_config_with_gpu() {
+        let config = DeployConfig {
+            image: Some("nvidia/cuda:11.0".to_string()),
+            volumes: vec![],
+            port_bindings: vec![],
+            memory_limit_mb: Some(4096),
+            use_gpu: true,
+            cmd: Some(vec!["python".to_string(), "train.py".to_string()]),
+            env_tree: None,
+        };
+
+        assert!(config.use_gpu);
+        assert_eq!(config.memory_limit_mb, Some(4096));
+        assert_eq!(config.cmd.unwrap()[1], "train.py");
+    }
+
+    #[test]
+    fn test_deploy_config_serialization() {
+        let config = DeployConfig {
+            image: Some("debian:latest".to_string()),
+            volumes: vec![
+                VolumeMount {
+                    host_path: "/host".to_string(),
+                    container_path: "/container".to_string(),
+                    read_only: false,
+                }
+            ],
+            port_bindings: vec![
+                PortRule {
+                    host_port: 8080,
+                    container_port: 80,
+                }
+            ],
+            memory_limit_mb: Some(1024),
+            use_gpu: false,
+            cmd: None,
+            env_tree: None,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: DeployConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(config.image, deserialized.image);
+        assert_eq!(config.volumes.len(), deserialized.volumes.len());
+        assert_eq!(config.port_bindings.len(), deserialized.port_bindings.len());
+    }
+
+    #[test]
+    fn test_env_tree_node_creation() {
+        let node = EnvTreeNode {
+            env_type: "micromamba".to_string(),
+            env_name: Some("my-env".to_string()),
+            image: None,
+            dependencies: Some(vec!["python=3.11".to_string()]),
+            pip_deps: Some(vec!["numpy".to_string()]),
+            children: None,
+        };
+
+        assert_eq!(node.env_type, "micromamba");
+        assert_eq!(node.env_name.unwrap(), "my-env");
+        assert!(node.dependencies.is_some());
+    }
+
+    #[test]
+    fn test_log_payload_creation() {
+        let payload = LogPayload {
+            line: "Container started".to_string(),
+            stream_type: "stdout".to_string(),
+        };
+
+        assert_eq!(payload.line, "Container started");
+        assert_eq!(payload.stream_type, "stdout");
+    }
+
+    #[test]
+    fn test_uuid_short_returns_hex() {
+        let uuid = super::uuid_short();
+        assert!(!uuid.is_empty());
+        // Should be valid hex
+        assert!(uuid.chars().all(|c| c.is_ascii_hexdigit()));
+    }
 }

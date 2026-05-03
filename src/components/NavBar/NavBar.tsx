@@ -2,6 +2,7 @@ import { useAppStore } from "../../store/useAppStore";
 import { checkRuntime, initRuntime, saveNyc, loadNyc } from "../../lib/tauri-bridge";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { DEMO_NODES, DEMO_EDGES } from "../../lib/demo";
+import { useTheme } from "../../context/ThemeContext";
 
 
 export default function NavBar() {
@@ -14,6 +15,7 @@ export default function NavBar() {
         setNodes, setEdges, setEnvironmentYaml,
         isDeploying
     } = useAppStore();
+    const { theme, toggleTheme, resolvedTheme } = useTheme();
 
     const runtimeOnline = runtimeKind !== null;
 
@@ -195,6 +197,16 @@ export default function NavBar() {
             <span className="navbar__project-name">{projectName}</span>
 
             <div className="navbar__spacer" />
+
+            {/* Theme toggle */}
+            <button
+                className="btn btn--sm btn--ghost"
+                onClick={toggleTheme}
+                title={`Current theme: ${theme}`}
+                style={{ marginRight: 8 }}
+            >
+                {resolvedTheme === 'dark' ? '☀️' : '🌙'} {theme}
+            </button>
 
             {/* Runtime badge */}
             <div className={`runtime-badge ${runtimeOnline ? "runtime-badge--online" : "runtime-badge--offline"}`}>

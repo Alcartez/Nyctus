@@ -12,7 +12,8 @@
 }
 
 /* ── Design tokens ─────────────────────────────────────────────────────────── */
-:root {
+:root,
+[data-theme="dark"] {
   /* Backgrounds */
   --bg-base: #0d0f14;
   --bg-surface: #13161e;
@@ -49,16 +50,45 @@
   --node-data: #10b981;
   --node-gui: #f59e0b;
   --node-generic: #8b92ab;
+}
 
-  /* Sizing */
-  --nav-height: 52px;
-  --sidebar-width: 260px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+[data-theme="light"] {
+  /* Backgrounds */
+  --bg-base: #f8f9fc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f0f1f5;
+  --bg-active: #e8e9f0;
 
-  /* Transitions */
-  --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Borders */
+  --border-subtle: #e2e4ea;
+  --border-default: #d1d5db;
+  --border-strong: #9ca3af;
+
+  /* Brand */
+  --brand: #6366f1;
+  --brand-hover: #4f46e5;
+  --brand-dim: rgba(99, 102, 241, 0.1);
+  --brand-glow: rgba(99, 102, 241, 0.2);
+
+  /* Accent */
+  --accent-cyan: #0891b2;
+  --accent-emerald: #059669;
+  --accent-amber: #d97706;
+  --accent-red: #dc2626;
+
+  /* Text */
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-code: #6366f1;
+
+  /* Node type colours */
+  --node-script: #6366f1;
+  --node-service: #0891b2;
+  --node-data: #059669;
+  --node-gui: #d97706;
+  --node-generic: #6b7280;
 }
 
 /* ── Reset ─────────────────────────────────────────────────────────────────── */
