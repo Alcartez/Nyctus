@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import NycNode from "./NycNode";
@@ -9,13 +10,15 @@ import type { NycNodeData, NycNodeType } from "../../types";
 vi.mock("../../store/useAppStore");
 
 // Mock @xyflow/react
+const mockDeleteElements = vi.fn();
+const mockSetNodes = vi.fn();
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
   return {
     ...(actual as any),
     useReactFlow: () => ({
-      deleteElements: vi.fn(),
-      setNodes: vi.fn(),
+      deleteElements: mockDeleteElements,
+      setNodes: mockSetNodes,
     }),
   };
 });
@@ -33,7 +36,6 @@ function renderNycNode(data: Partial<NycNodeData>, nodeType: NycNodeType = "Scri
   const props: NodeProps = {
     id: "test-node-1",
     type: "custom",
-    position: { x: 0, y: 0 },
     data: nodeData as any,
     selected: false,
     dragging: false,
@@ -41,12 +43,12 @@ function renderNycNode(data: Partial<NycNodeData>, nodeType: NycNodeType = "Scri
     selectable: true,
     deletable: true,
     draggable: true,
-    connectable: true,
+    isConnectable: true,
     parentId: parentId as any,
     width: 200,
     height: 100,
-    initialized: true,
-    isConnectable: true,
+    positionAbsoluteX: 0,
+    positionAbsoluteY: 0,
   };
 
   return render(
@@ -101,17 +103,11 @@ describe("NycNode", () => {
   });
 
   it("calls deleteElements when delete button is clicked", () => {
-    const deleteElements = vi.fn();
-    vi.mocked(require("@xyflow/react").useReactFlow).mockReturnValue({
-      deleteElements,
-      setNodes: vi.fn(),
-    });
-
     renderNycNode({});
     const deleteBtn = screen.getByTitle("Delete node");
     fireEvent.click(deleteBtn);
 
-    expect(deleteElements).toHaveBeenCalledWith({ nodes: [{ id: "test-node-1" }] });
+    expect(mockDeleteElements).toHaveBeenCalledWith({ nodes: [{ id: "test-node-1" }] });
   });
 
   it("shows environment name when node has parent", () => {

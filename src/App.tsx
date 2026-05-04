@@ -3,7 +3,7 @@
 import { useEffect, useCallback } from "react";
 import "./index.css";
 import { useAppStore } from "./store/useAppStore";
-import { checkRuntime, initRuntime, pullBaseImage, onPullProgress, checkGpuAvailable } from "./lib/tauri-bridge";
+import { checkRuntime, initRuntime, pullBaseImage, onPullProgress, checkGpuAvailable, RuntimeStatus } from "./lib/tauri-bridge";
 import NavBar from "./components/NavBar/NavBar";
 import SetupWizard from "./components/SetupWizard/SetupWizard";
 import BuildModeLayout from "./components/BuildMode/BuildModeLayout";
@@ -26,7 +26,7 @@ export default function App() {
     (async () => {
       try {
         const info = await checkRuntime();
-        if (info.status === "running" && info.runtime) {
+        if (info.status === RuntimeStatus.Running && info.runtime) {
           await initRuntime(info.runtime);
           setRuntimeKind(info.runtime);
           
@@ -41,7 +41,7 @@ export default function App() {
         // setup wizard will handle it
       }
     })();
-  }, [setRuntimeKind]);
+  }, [setRuntimeKind, setGpuStatus]);
 
   // ── Auto-detect GuiNode in current pipeline ─────────────────────────────────
   useEffect(() => {
@@ -82,7 +82,6 @@ export default function App() {
         });
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 

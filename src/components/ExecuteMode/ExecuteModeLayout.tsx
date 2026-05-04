@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAppStore } from "../../store/useAppStore";
 import { useTerminal } from "../../hooks/useTerminal";
 import { usePipelineExecutor } from "../../hooks/usePipelineExecutor";
-import type { Node } from "reactflow";
+import type { Node } from "@xyflow/react";
 
 export default function ExecuteModeLayout() {
     const { nodes, edges, deployConfig } = useAppStore();

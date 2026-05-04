@@ -1,10 +1,6 @@
+import { describe, it, expect } from "vitest";
 import { useAppStore } from "./useAppStore";
-import { createGraphSlice } from "./slices/graphSlice";
-import { createRuntimeSlice } from "./slices/runtimeSlice";
-import { createProjectSlice } from "./slices/projectSlice";
-import { createUiSlice } from "./slices/uiSlice";
-import { createDeploySlice } from "./slices/deploySlice";
-import { create } from "zustand";
+import { GpuStatus } from "../types";
 
 // Mock slices for isolated testing
 describe("useAppStore", () => {
@@ -80,16 +76,16 @@ describe("useAppStore", () => {
   it("should initialize with default runtime state", () => {
     const state = useAppStore.getState();
 
-    expect(state.runtimeStatus).toBe("checking");
-    expect(state.currentRuntime).toBeNull();
-    expect(state.isRuntimeReady).toBe(false);
+    expect(state.runtimeKind).toBeNull();
+    expect(state.gpuStatus).toBe(GpuStatus.Unavailable);
+    expect(state.activeContainerId).toBeNull();
   });
 
   it("should initialize with default UI state", () => {
     const state = useAppStore.getState();
 
-    expect(state.mode).toBe("BUILD");
-    expect(state.isDirty).toBe(false);
-    expect(state.showMinimap).toBe(true);
+    expect(state.appMode).toBe("BUILD");
+    expect(state.isDeploying).toBe(false);
+    expect(state.hasGuiNode).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
-import type { RuntimeKind, GpuStatus } from "../types";
+import type { RuntimeKind } from "../../types";
+import { GpuStatus } from "../../types";
 
 export interface RuntimeSlice {
     runtimeKind: RuntimeKind | null;
@@ -11,7 +12,7 @@ export interface RuntimeSlice {
 
 export const createRuntimeSlice = (set: any) => ({
     runtimeKind: null as RuntimeKind | null,
-    gpuStatus: "Unavailable" as GpuStatus,
+    gpuStatus: GpuStatus.Unavailable,
     activeContainerId: null as string | null,
     setRuntimeKind: (kind: RuntimeKind | null) => set({ runtimeKind: kind }),
     setGpuStatus: (gpuStatus: GpuStatus) => set({ gpuStatus }),

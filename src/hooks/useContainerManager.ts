@@ -1,6 +1,6 @@
-import { useAppStore } from "../../store/useAppStore";
-import { deployEnvironment, killEnvironment } from "../../lib/tauri-bridge";
-import type { DeployConfig } from "../../types";
+import { useAppStore } from "../store/useAppStore";
+import { deployEnvironment, killEnvironment } from "../lib/tauri-bridge";
+import type { DeployConfig } from "../types";
 
 interface UseContainerManagerReturn {
     deploy: (config: DeployConfig) => Promise<string>;
@@ -25,11 +25,7 @@ export function useContainerManager(): UseContainerManagerReturn {
     };
 
     const kill = async (): Promise<void> => {
-        try {
-            await killEnvironment();
-        } catch (err) {
-            throw err;
-        }
+        await killEnvironment();
     };
 
     return {

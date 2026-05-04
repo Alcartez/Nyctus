@@ -1,6 +1,7 @@
 // Global type definitions for Nyctus-core
 // Import generated types from Rust structs
-export type { RuntimeKind, RuntimeStatus, GpuStatus } from "./generated/preflight";
+import { RuntimeKind, RuntimeStatus, GpuStatus } from "./generated/preflight";
+export { RuntimeKind, RuntimeStatus, GpuStatus };
 export type { NycManifest, LoadedProject, SavePayload } from "./generated/nyc";
 export type { VolumeMount, PortRule, DeployConfig, LogPayload } from "./generated/container";
 export type { Node, Edge, NodeData, PipelineConfig } from "./generated/pipeline";

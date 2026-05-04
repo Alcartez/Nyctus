@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   checkRuntime,
   checkGpuAvailable,
@@ -9,7 +9,6 @@ import {
   saveNyc,
   loadNyc,
   openInOsEditor,
-  readOsFile,
   onContainerLog,
   onPullProgress,
   onContainerStarted,

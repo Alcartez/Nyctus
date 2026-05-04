@@ -3,7 +3,7 @@ import { useAppStore } from '../store/useAppStore';
 import { saveNyc } from '../lib/tauri-bridge';
 
 export function useAutoSave(intervalMs = 30000) {
-  const saveTimeoutRef = useRef<ReturnType<typeof setInterval>>();
+  const saveTimeoutRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const { projectName, nodes, edges, environmentYaml, projectPath } = useAppStore();
 
   useEffect(() => {

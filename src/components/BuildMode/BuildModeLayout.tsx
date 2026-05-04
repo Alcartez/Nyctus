@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useEffect } from "react";
+import React, { useCallback, useRef } from "react";
 import {
     ReactFlow,
     Background,
@@ -14,6 +14,7 @@ import {
     BackgroundVariant,
     useReactFlow,
     ReactFlowProvider,
+    Panel as RfPanel,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Group, Panel, Separator } from "react-resizable-panels";
@@ -71,44 +72,29 @@ function BuildModeLayoutInner() {
     const [rfNodes, setRfNodes, onNodesChangeBase] = useNodesState(storeNodes);
     const [rfEdges, setRfEdges, onEdgesChangeBase] = useEdgesState(storeEdges);
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
-    const { screenToFlowPosition, getNodes, getEdges, undo, redo } = useReactFlow();
+    const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
 
-    // Keyboard shortcuts for undo/redo
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-                if (e.shiftKey) {
-                    e.preventDefault();
-                    redo();
-                } else {
-                    e.preventDefault();
-                    undo();
-                }
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [undo, redo]);
+    // Keyboard shortcuts can be added here if needed
 
     // Sync store → ReactFlow only on load (when lengths differ)
     React.useEffect(() => {
         if (storeNodes.length !== rfNodes.length) {
             setRfNodes(storeNodes);
         }
-    }, [storeNodes, setRfNodes]);
+    }, [storeNodes, setRfNodes, rfNodes.length]);
 
     React.useEffect(() => {
         if (storeEdges.length !== rfEdges.length) {
             setRfEdges(storeEdges);
         }
-    }, [storeEdges, setRfEdges]);
+    }, [storeEdges, setRfEdges, rfEdges.length]);
 
     // Expose getter for NodeInspector to read current nodes
     const getRfNodes = useCallback(() => getNodes() as Node<NycNodeData>[], [getNodes]);
 
     // ── Sync ReactFlow → Zustand via onChange callbacks ──────────────────────
     const onNodesChange = useCallback(
-        (changes: NodeChange[]) => {
+        (changes: NodeChange<Node<NycNodeData>>[]) => {
             onNodesChangeBase(changes);
             // Sync to store after ReactFlow processes the change
             requestAnimationFrame(() => setStoreNodes(getNodes() as Node<NycNodeData>[]));
@@ -175,39 +161,39 @@ function BuildModeLayoutInner() {
 
         document.querySelectorAll(".env-group--drag-target").forEach(el => el.classList.remove("env-group--drag-target"));
 
-        setRfNodes((nds) => {
-            const updated = nds.map((n) => {
-                if (n.id !== node.id) return n;
+            setRfNodes((nds) => {
+                const updated = nds.map((n) => {
+                    if (n.id !== node.id) return n;
 
-                const currentParentId = n.parentId;
-                const newParentId = parentGroup ? parentGroup.id : undefined;
+                    const currentParentId = n.parentId;
+                    const newParentId = parentGroup ? parentGroup.id : undefined;
 
-                if (currentParentId === newParentId) return n;
+                    if (currentParentId === newParentId) return n;
 
-                if (newParentId && parentGroup) {
-                    return {
-                        ...n,
-                        parentId: newParentId,
-                        extent: "parent" as const,
-                        zIndex: 1,
-                        position: {
-                            x: absX - parentGroup.position.x,
-                            y: absY - parentGroup.position.y,
-                        },
-                    };
-                } else {
-                    return {
-                        ...n,
-                        parentId: undefined,
-                        extent: undefined,
-                        zIndex: 0,
-                        position: { x: absX, y: absY },
-                    };
-                }
+                    if (newParentId && parentGroup) {
+                        return {
+                            ...n,
+                            parentId: newParentId,
+                            extent: "parent" as const,
+                            zIndex: 1,
+                            position: {
+                                x: absX - parentGroup.position.x,
+                                y: absY - parentGroup.position.y,
+                            },
+                        } as Node<NycNodeData>;
+                    } else {
+                        return {
+                            ...n,
+                            parentId: undefined,
+                            extent: undefined,
+                            zIndex: 0,
+                            position: { x: absX, y: absY },
+                        } as Node<NycNodeData>;
+                    }
+                }) as Node<NycNodeData>[];
+                setStoreNodes(updated);
+                return updated;
             });
-            setStoreNodes(updated as Node<NycNodeData>[]);
-            return updated;
-        });
     }, [getNodes, setRfNodes, setStoreNodes]);
 
     // ── Drag highlight: glow when hovering over an EnvGroup ──────────────────────
@@ -297,9 +283,9 @@ function BuildModeLayoutInner() {
             zIndex: -1,
         };
         setRfNodes((nds) => {
-            const next = [...nds, newGroup as Node];
+            const next = [...nds, newGroup as unknown as Node<NycNodeData>];
             setStoreNodes(next as Node<NycNodeData>[]);
-            return next;
+            return next as Node<NycNodeData>[];
         });
     }, [setRfNodes, setStoreNodes, screenToFlowPosition]);
 
@@ -377,10 +363,9 @@ function BuildModeLayoutInner() {
                                         style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)" }}
                                         nodeColor={(n) => n.type === "EnvGroupNode" ? "rgba(99,102,241,0.3)" : "var(--brand)"}
                                     />
-                                    <Panel position="top-right" style={{ display: "flex", gap: 4 }}>
-                                        <button onClick={() => undo()} title="Undo (Ctrl+Z)" style={{ padding: "4px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border-default)", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>↩ Undo</button>
-                                        <button onClick={() => redo()} title="Redo (Ctrl+Shift+Z)" style={{ padding: "4px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border-default)", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>↪ Redo</button>
-                                    </Panel>
+                                    <RfPanel position="top-right" style={{ display: "flex", gap: 4 }}>
+                                        {/* Undo/redo buttons removed: @xyflow/react does not export useUndo/useRedo */}
+                                    </RfPanel>
                                 </ReactFlow>
                             </div>
                         </Panel>

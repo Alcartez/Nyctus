@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { checkRuntime, initRuntime, pullBaseImage, onPullProgress, checkGpuAvailable } from "../../lib/tauri-bridge";
+import { checkRuntime, initRuntime, pullBaseImage, onPullProgress, checkGpuAvailable, RuntimeStatus, RuntimeKind } from "../../lib/tauri-bridge";
 import { useAppStore } from "../../store/useAppStore";
-import type { RuntimeKind } from "../../types";
 
 const BASE_IMAGE_LABEL = "docker.io/alcartez/nyctus-os:latest";
 
@@ -25,7 +24,7 @@ export default function SetupWizard() {
         setStep("checking");
         try {
             const info = await checkRuntime();
-            if (info.status === "running" && info.runtime) {
+            if (info.status === RuntimeStatus.Running && info.runtime) {
                 await initRuntime(info.runtime);
                 setRuntimeKind(info.runtime);
                 
@@ -34,7 +33,7 @@ export default function SetupWizard() {
                 
                 // Pull base image if not already present (pull is a no-op if cached)
                 await doPull();
-            } else if (info.status === "stopped" && info.runtime) {
+            } else if (info.status === RuntimeStatus.StoppedButInstalled && info.runtime) {
                 setStoppedRuntime(info.runtime);
                 setStep("stopped");
             } else {
@@ -69,7 +68,7 @@ export default function SetupWizard() {
         for (let i = 0; i < 30; i++) {
             await new Promise((r) => setTimeout(r, 1000));
             const info = await checkRuntime();
-            if (info.status === "running" && info.runtime) {
+            if (info.status === RuntimeStatus.Running && info.runtime) {
                 await initRuntime(info.runtime);
                 setRuntimeKind(info.runtime);
                 

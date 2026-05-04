@@ -1,18 +1,21 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { RuntimeInfo, DeployConfig, LogPayload, SavePayload, LoadedProject, GpuStatus } from "../types";
+import type { RuntimeInfo, DeployConfig, LogPayload, SavePayload, LoadedProject } from "../types";
+import { RuntimeStatus, RuntimeKind, GpuStatus } from "../types";
+
+export { RuntimeStatus, RuntimeKind, GpuStatus };
 
 const IS_TAURI = isTauri();
 
 // ── Runtime ───────────────────────────────────────────────────────────────────
 
 export async function checkRuntime(): Promise<RuntimeInfo> {
-    if (!IS_TAURI) return { status: "running", runtime: "Podman" };
+    if (!IS_TAURI) return { status: RuntimeStatus.Running, runtime: RuntimeKind.Podman };
     return invoke<RuntimeInfo>("check_runtime");
 }
 
 export async function checkGpuAvailable(runtimeKind: string): Promise<GpuStatus> {
-    if (!IS_TAURI) return "Unavailable";
+    if (!IS_TAURI) return GpuStatus.Unavailable;
     return invoke<GpuStatus>("check_gpu_available", { runtimeKind });
 }
 

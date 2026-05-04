@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { Node, Edge } from "reactflow";
-import type { DeployConfig } from "../../types";
+import type { Node, Edge } from "@xyflow/react";
+import type { DeployConfig } from "../types";
 import { useContainerManager } from "./useContainerManager";
-import { useToast } from "../lib/useToast";
 
 type RunState = "idle" | "running" | "done";
 
@@ -21,7 +20,6 @@ export function usePipelineExecutor({
     selectedScript,
     writeToTerminal,
 }: UsePipelineExecutorOptions) {
-    const { showToast } = useToast();
     const [runState, setRunState] = useState<RunState>("idle");
     const [guiPort, setGuiPort] = useState<number | null>(null);
     const [guiReady, setGuiReady] = useState(false);

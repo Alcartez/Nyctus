@@ -1,4 +1,4 @@
-import type { AppMode } from "../types";
+import type { AppMode } from "../../types";
 
 export interface UiSlice {
     appMode: AppMode;

@@ -2,7 +2,8 @@ import { useEffect, useRef, useCallback } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { onContainerLog, onContainerKilled } from "../../lib/tauri-bridge";
+import { onContainerLog, onContainerKilled } from "../lib/tauri-bridge";
+import type { LogPayload } from "../types";
 
 const XTERM_THEME = {
     background: "#0a0b10", foreground: "#e8eaf0", cursor: "#6366f1",
@@ -53,18 +54,18 @@ export function useTerminal() {
         let unlistenLog: (() => void) | undefined;
         let unlistenKill: (() => void) | undefined;
 
-        onContainerLog((payload) => {
+        onContainerLog((payload: LogPayload) => {
             const term = xtermRef.current;
             if (!term) return;
             const color = payload.stream_type === "stderr" ? "\x1b[31m" : "";
             const reset = payload.stream_type === "stderr" ? "\x1b[0m" : "";
             term.writeln(`${color}${payload.line.trimEnd()}${reset}`);
-        }).then((fn) => { unlistenLog = fn; });
+        }).then((fn: () => void) => { unlistenLog = fn; });
 
         onContainerKilled(() => {
             xtermRef.current?.writeln("\x1b[33m\n[container stopped]\x1b[0m");
             onKilledRef.current?.();
-        }).then((fn) => { unlistenKill = fn; });
+        }).then((fn: () => void) => { unlistenKill = fn; });
 
         return () => { unlistenLog?.(); unlistenKill?.(); };
     }, []);

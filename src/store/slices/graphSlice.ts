@@ -1,5 +1,5 @@
 import { type Node, type Edge } from "@xyflow/react";
-import type { NycNodeData } from "../types";
+import type { NycNodeData } from "../../types";
 
 export interface GraphSlice {
     nodes: Node<NycNodeData>[];

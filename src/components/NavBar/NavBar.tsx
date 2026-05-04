@@ -1,5 +1,5 @@
 import { useAppStore } from "../../store/useAppStore";
-import { checkRuntime, initRuntime, saveNyc, loadNyc } from "../../lib/tauri-bridge";
+import { checkRuntime, initRuntime, saveNyc, loadNyc, RuntimeStatus } from "../../lib/tauri-bridge";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { DEMO_NODES, DEMO_EDGES } from "../../lib/demo";
 import { useTheme } from "../../context/ThemeContext";
@@ -25,7 +25,7 @@ export default function NavBar() {
             // ensure runtime is ready before switching
             if (!runtimeOnline) {
                 const info = await checkRuntime();
-                if (info.status === "running" && info.runtime) {
+                if (info.status === RuntimeStatus.Running && info.runtime) {
                     await initRuntime(info.runtime);
                     setRuntimeKind(info.runtime);
                 } else {

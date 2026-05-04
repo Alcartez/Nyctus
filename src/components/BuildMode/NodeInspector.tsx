@@ -44,45 +44,46 @@ export default function NodeInspector({ getRfNodes, setRfNodes }: NodeInspectorP
         }
     }, [monaco, selectedNode]);
 
-    if (!selectedNode) {
-        return (
-            <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center", marginTop: 40 }}>
-                Select a node to inspect...
-            </div>
-        );
-    }
+    const nodeData = selectedNode?.data;
+    const [parsedConfig, setParsedConfig] = useState<Record<string, unknown>>({});
 
-    const nodeData = selectedNode.data;
-    let parsedConfig: Record<string, unknown> = {};
-    try {
-        parsedConfig = JSON.parse(nodeData.config) as Record<string, unknown>;
-    } catch {
-        // invalid JSON string currently in editor — fallback to empty obj for visual renderer
-    }
+    useEffect(() => {
+        if (selectedNode) {
+            try {
+                const config = JSON.parse(selectedNode.data.config) as Record<string, unknown>;
+                setParsedConfig(config);
+            } catch {
+                setParsedConfig({});
+            }
+        } else {
+            setParsedConfig({});
+        }
+    }, [selectedNode]);
 
     const handleVisualChange = useCallback((newJsonData: Record<string, unknown>) => {
+        if (!selectedNode) return;
         const str = JSON.stringify(newJsonData, null, 2);
 
-        let newLabel = nodeData.label;
-        if (nodeData.nodeType === "EnvGroupNode") {
+        let newLabel = selectedNode.data.label;
+        if (selectedNode.data.nodeType === "EnvGroupNode") {
             if (newJsonData.label) newLabel = newJsonData.label as string;
         } else {
             const params = newJsonData.params as Record<string, unknown> | undefined;
             if (params?.label) newLabel = params.label as string;
         }
 
-        updateNodeConfig(selectedNode!.id, str);
-        setRfNodes((nds) => nds.map((n) => n.id === selectedNode!.id ? { ...n, data: { ...n.data, config: str, label: newLabel } } : n));
-    }, [nodeData, selectedNode, updateNodeConfig, setRfNodes]);
+        updateNodeConfig(selectedNode.id, str);
+        setRfNodes((nds) => nds.map((n) => n.id === selectedNode.id ? { ...n, data: { ...n.data, config: str, label: newLabel } } : n));
+    }, [selectedNode, updateNodeConfig, setRfNodes]);
 
     const handleJsonChange = useCallback((value: string | undefined) => {
         if (value !== undefined && selectedNode) {
             updateNodeConfig(selectedNode.id, value);
 
-            let newLabel = nodeData.label;
+            let newLabel = selectedNode.data.label;
             try {
                 const parsed = JSON.parse(value) as Record<string, unknown>;
-                if (nodeData.nodeType === "EnvGroupNode") {
+                if (selectedNode.data.nodeType === "EnvGroupNode") {
                     if (parsed.label) newLabel = parsed.label as string;
                 } else {
                     const params = parsed.params as Record<string, unknown> | undefined;
@@ -92,9 +93,10 @@ export default function NodeInspector({ getRfNodes, setRfNodes }: NodeInspectorP
 
             setRfNodes((nds) => nds.map((n) => n.id === selectedNode.id ? { ...n, data: { ...n.data, config: value, label: newLabel } } : n));
         }
-    }, [nodeData, selectedNode, updateNodeConfig, setRfNodes]);
+    }, [selectedNode, updateNodeConfig, setRfNodes]);
 
     const handleSaveFullEditor = async () => {
+        if (!selectedNode) return;
         let finalContent = fullEditorState.tempHash;
 
         if (fullEditorState.osFilePath) {
@@ -113,6 +115,14 @@ export default function NodeInspector({ getRfNodes, setRfNodes }: NodeInspectorP
         handleVisualChange(newData);
         setFullEditorState({ ...fullEditorState, isOpen: false, osFilePath: undefined });
     };
+
+    if (!selectedNode) {
+        return (
+            <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center", marginTop: 40 }}>
+                Select a node to inspect...
+            </div>
+        );
+    }
 
     if (fullEditorState.isOpen) {
         return (
@@ -183,15 +193,16 @@ export default function NodeInspector({ getRfNodes, setRfNodes }: NodeInspectorP
                             borderBottom: "1px solid var(--border-subtle)", paddingBottom: 16
                         }}>
                             <div style={{ background: "var(--bg-elevated)", padding: "4px 8px", borderRadius: 6, fontSize: 16 }}>
-                                {nodeData.icon || "⬡"}
+                                {nodeData?.icon || "⬡"}
                             </div>
-                            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{nodeData.label}</h3>
+                            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{nodeData?.label}</h3>
                         </div>
 
-                        {["ScriptNode", "DataNode", "ServiceNode", "GuiNode"].includes(nodeData.nodeType) && (
+                        {["ScriptNode", "DataNode", "ServiceNode", "GuiNode"].includes(nodeData?.nodeType || "") && (
                             <div style={{ marginBottom: 20 }}>
                                 <button
                                     onClick={async () => {
+                                        if (!nodeData) return;
                                         const params = (parsedConfig.params || {}) as Record<string, unknown>;
                                         let field: "script" | "content" | "entrypoint_script" = "script";
                                         let fileExt = ".txt";
@@ -213,7 +224,7 @@ export default function NodeInspector({ getRfNodes, setRfNodes }: NodeInspectorP
 
                                         const currentContent = (params[field] as string) || "";
                                         const safeLabel = nodeData.label.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                                        const filename = `nyctus_${selectedNode!.id}_${safeLabel}${fileExt}`;
+                                        const filename = `nyctus_${selectedNode.id}_${safeLabel}${fileExt}`;
 
                                         try {
                                             const osPath = await openInOsEditor(filename, currentContent);
@@ -239,7 +250,7 @@ export default function NodeInspector({ getRfNodes, setRfNodes }: NodeInspectorP
                             </div>
                         )}
 
-                        {nodeData.schema ? (
+                        {nodeData?.schema ? (
                             <Form
                                 schema={nodeData.schema}
                                 formData={
@@ -270,7 +281,7 @@ export default function NodeInspector({ getRfNodes, setRfNodes }: NodeInspectorP
                         height="100%"
                         theme="vs-dark"
                         language="json"
-                        value={nodeData.config}
+                        value={nodeData?.config || ""}
                         onChange={handleJsonChange}
                         options={{
                             minimap: { enabled: false },
