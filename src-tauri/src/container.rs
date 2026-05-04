@@ -136,7 +136,12 @@ pub async fn deploy_environment(
     let exposed: HashMap<String, HashMap<(), ()>> = config
         .port_bindings
         .iter()
-        .map(|r| (format!("{}/tcp", r.container_port), HashMap::<(), ()>::new()))
+        .map(|r| {
+            (
+                format!("{}/tcp", r.container_port),
+                HashMap::<(), ()>::new(),
+            )
+        })
         .collect();
 
     let memory = config.memory_limit_mb.map(|mb| (mb * 1024 * 1024) as i64);
@@ -159,7 +164,11 @@ pub async fn deploy_environment(
 
     let host_config = HostConfig {
         binds: if binds.is_empty() { None } else { Some(binds) },
-        port_bindings: if port_map.is_empty() { None } else { Some(port_map) },
+        port_bindings: if port_map.is_empty() {
+            None
+        } else {
+            Some(port_map)
+        },
         memory,
         device_requests,
         ..Default::default()
@@ -170,7 +179,11 @@ pub async fn deploy_environment(
         user: Some(user),
         cmd: config.cmd,
 
-        exposed_ports: if exposed.is_empty() { None } else { Some(exposed) },
+        exposed_ports: if exposed.is_empty() {
+            None
+        } else {
+            Some(exposed)
+        },
         host_config: Some(host_config),
         ..Default::default()
     };
@@ -374,19 +387,15 @@ mod tests {
     fn test_deploy_config_serialization() {
         let config = DeployConfig {
             image: Some("debian:latest".to_string()),
-            volumes: vec![
-                VolumeMount {
-                    host_path: "/host".to_string(),
-                    container_path: "/container".to_string(),
-                    read_only: false,
-                }
-            ],
-            port_bindings: vec![
-                PortRule {
-                    host_port: 8080,
-                    container_port: 80,
-                }
-            ],
+            volumes: vec![VolumeMount {
+                host_path: "/host".to_string(),
+                container_path: "/container".to_string(),
+                read_only: false,
+            }],
+            port_bindings: vec![PortRule {
+                host_port: 8080,
+                container_port: 80,
+            }],
             memory_limit_mb: Some(1024),
             use_gpu: false,
             cmd: None,

@@ -58,29 +58,36 @@ pub fn save_nyc(payload: SavePayload, dest_path: &str) -> Result<(), String> {
         nyctus_version: env!("CARGO_PKG_VERSION").to_string(),
     };
     let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
-    zip.start_file("manifest.json", options).map_err(|e| e.to_string())?;
-    zip.write_all(manifest_json.as_bytes()).map_err(|e| e.to_string())?;
+    zip.start_file("manifest.json", options)
+        .map_err(|e| e.to_string())?;
+    zip.write_all(manifest_json.as_bytes())
+        .map_err(|e| e.to_string())?;
 
     // graph.json
-    zip.start_file("graph.json", options).map_err(|e| e.to_string())?;
-    zip.write_all(payload.graph_json.as_bytes()).map_err(|e| e.to_string())?;
+    zip.start_file("graph.json", options)
+        .map_err(|e| e.to_string())?;
+    zip.write_all(payload.graph_json.as_bytes())
+        .map_err(|e| e.to_string())?;
 
     // environment.yaml
-    zip.start_file("environment.yaml", options).map_err(|e| e.to_string())?;
-    zip.write_all(payload.environment_yaml.as_bytes()).map_err(|e| e.to_string())?;
+    zip.start_file("environment.yaml", options)
+        .map_err(|e| e.to_string())?;
+    zip.write_all(payload.environment_yaml.as_bytes())
+        .map_err(|e| e.to_string())?;
 
     // src/ user scripts
     for (filename, content) in &payload.src_files {
         let entry = format!("src/{}", filename);
         zip.start_file(&entry, options).map_err(|e| e.to_string())?;
-        zip.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
+        zip.write_all(content.as_bytes())
+            .map_err(|e| e.to_string())?;
     }
 
     zip.finish().map_err(|e| {
         error!("Error finishing zip: {}", e);
         e.to_string()
     })?;
-    
+
     info!(%dest_path, "Successfully saved .nyc file");
     Ok(())
 }
@@ -91,13 +98,16 @@ pub fn save_nyc(payload: SavePayload, dest_path: &str) -> Result<(), String> {
 /// Returns the loaded project data and the cache directory path.
 pub fn load_nyc(src_path: &str) -> Result<LoadedProject, String> {
     info!(%src_path, "Loading .nyc file");
-    
-    let mut file = fs::File::open(src_path).map_err(|e| format!("Error opening file for load: {}", e))?;
+
+    let mut file =
+        fs::File::open(src_path).map_err(|e| format!("Error opening file for load: {}", e))?;
     let mut payload_bytes = Vec::new();
-    file.read_to_end(&mut payload_bytes).map_err(|e| format!("Error reading file: {}", e))?;
+    file.read_to_end(&mut payload_bytes)
+        .map_err(|e| format!("Error reading file: {}", e))?;
 
     let cursor = std::io::Cursor::new(payload_bytes);
-    let mut zip = zip::ZipArchive::new(cursor).map_err(|e| format!("Error parsing archive: {}", e))?;
+    let mut zip =
+        zip::ZipArchive::new(cursor).map_err(|e| format!("Error parsing archive: {}", e))?;
 
     // Read manifest first to get project name
     let manifest: NycManifest = {
@@ -140,12 +150,20 @@ pub fn load_nyc(src_path: &str) -> Result<LoadedProject, String> {
         } else {
             if let Some(parent) = out_path.parent() {
                 fs::create_dir_all(parent).map_err(|e| {
-                    error!("Error creating parent dir for file {}: {}", out_path.display(), e);
+                    error!(
+                        "Error creating parent dir for file {}: {}",
+                        out_path.display(),
+                        e
+                    );
                     e.to_string()
                 })?;
             }
             let mut out_file = fs::File::create(&out_path).map_err(|e| {
-                error!("Error creating extracted file {}: {}", out_path.display(), e);
+                error!(
+                    "Error creating extracted file {}: {}",
+                    out_path.display(),
+                    e
+                );
                 e.to_string()
             })?;
             std::io::copy(&mut entry, &mut out_file).map_err(|e| {
@@ -158,8 +176,8 @@ pub fn load_nyc(src_path: &str) -> Result<LoadedProject, String> {
     // Read graph.json and environment.yaml from extracted files
     let mut graph_json = fs::read_to_string(cache_dir.join("graph.json"))
         .unwrap_or_else(|_| "{\"nodes\":[],\"edges\":[]}".to_string());
-    
-    // --- Hydration Step --- 
+
+    // --- Hydration Step ---
     // Find all dehydrated script pointers (e.g. "file://nyctus_src/script.py")
     // and replace them with the actual escaped file contents.
     let src_dir = cache_dir.join("src");
@@ -170,12 +188,13 @@ pub fn load_nyc(src_path: &str) -> Result<LoadedProject, String> {
                     if file_type.is_file() {
                         let filename = entry.file_name().to_string_lossy().to_string();
                         let target_pointer = format!("\"file://nyctus_src/{}\"", filename);
-                        
+
                         // Only attempt to read and replace if the pointer actually exists in the JSON graph
                         if graph_json.contains(&target_pointer) {
                             if let Ok(raw_content) = fs::read_to_string(entry.path()) {
                                 // We must escape the raw code so it doesn't break the JSON structure when injected
-                                let escaped_content = serde_json::to_string(&raw_content).unwrap_or_else(|_| "\"\"".to_string());
+                                let escaped_content = serde_json::to_string(&raw_content)
+                                    .unwrap_or_else(|_| "\"\"".to_string());
                                 graph_json = graph_json.replace(&target_pointer, &escaped_content);
                             }
                         }
@@ -185,8 +204,8 @@ pub fn load_nyc(src_path: &str) -> Result<LoadedProject, String> {
         }
     }
 
-    let environment_yaml = fs::read_to_string(cache_dir.join("environment.yaml"))
-        .unwrap_or_default();
+    let environment_yaml =
+        fs::read_to_string(cache_dir.join("environment.yaml")).unwrap_or_default();
 
     Ok(LoadedProject {
         manifest,

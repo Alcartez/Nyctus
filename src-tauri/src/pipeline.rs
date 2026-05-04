@@ -81,11 +81,17 @@ pub fn build_pipeline_config(
     let gui_port = gui_node.and_then(|n| {
         let cfg = parse_config(&n.data.config);
         let params = get_params(&cfg);
-        params.get("port").and_then(|v| v.as_u64()).map(|v| v as u16)
+        params
+            .get("port")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u16)
     });
 
     // Collect script nodes
-    let script_nodes: Vec<&Node> = nodes.iter().filter(|n| n.data.node_type == "ScriptNode").collect();
+    let script_nodes: Vec<&Node> = nodes
+        .iter()
+        .filter(|n| n.data.node_type == "ScriptNode")
+        .collect();
 
     // Collect parent environment group IDs
     let parent_ids: Vec<String> = script_nodes
@@ -99,7 +105,8 @@ pub fn build_pipeline_config(
     if parent_ids.is_empty() && !script_nodes.is_empty() {
         // No env groups - use default nyctus-demo
         env_setup_steps.push("micromamba env remove -n nyctus-demo -y 2>&1 || true".to_string());
-        env_setup_steps.push("micromamba create -n nyctus-demo python=3.11 pip -y -c conda-forge".to_string());
+        env_setup_steps
+            .push("micromamba create -n nyctus-demo python=3.11 pip -y -c conda-forge".to_string());
     }
 
     for parent_id in &parent_ids {
@@ -107,10 +114,12 @@ pub fn build_pipeline_config(
             let cfg = parse_config(&group.data.config);
             let params = get_params(&cfg);
 
-            let env_type = params.get("envType")
+            let env_type = params
+                .get("envType")
                 .and_then(|v| v.as_str())
                 .unwrap_or("micromamba");
-            let env_name = params.get("envName")
+            let env_name = params
+                .get("envName")
                 .and_then(|v| v.as_str())
                 .unwrap_or("nyctus-demo");
 
@@ -122,16 +131,20 @@ pub fn build_pipeline_config(
                     if !dep_list.is_empty() {
                         env_setup_steps.push(format!(
                             "mkdir -p /tmp/bun_{} && cd /tmp/bun_{} && bun add {}",
-                            env_name, env_name, dep_list.join(" ")
+                            env_name,
+                            env_name,
+                            dep_list.join(" ")
                         ));
                     }
                 }
             } else {
-                let deps: Vec<&str> = params.get("dependencies")
+                let deps: Vec<&str> = params
+                    .get("dependencies")
                     .and_then(|v| v.as_array())
                     .map(|arr| arr.iter().filter_map(|d| d.as_str()).collect())
                     .unwrap_or_else(|| vec!["python=3.11"]);
-                let deps_with_pip: Vec<&str> = deps.iter().copied().chain(std::iter::once("pip")).collect();
+                let deps_with_pip: Vec<&str> =
+                    deps.iter().copied().chain(std::iter::once("pip")).collect();
                 let deps_with_pip_str = deps_with_pip.join(" ");
 
                 env_setup_steps.push(format!(
@@ -148,7 +161,8 @@ pub fn build_pipeline_config(
                     if !pip_list.is_empty() {
                         env_setup_steps.push(format!(
                             "micromamba run -n {} python -m pip install {}",
-                            env_name, pip_list.join(" ")
+                            env_name,
+                            pip_list.join(" ")
                         ));
                     }
                 }
@@ -168,7 +182,10 @@ pub fn build_pipeline_config(
         }
     } else {
         // Run all data nodes first
-        let data_nodes: Vec<&Node> = nodes.iter().filter(|n| n.data.node_type == "DataNode").collect();
+        let data_nodes: Vec<&Node> = nodes
+            .iter()
+            .filter(|n| n.data.node_type == "DataNode")
+            .collect();
         for data_node in data_nodes {
             build_data_steps(&mut steps, data_node);
         }
@@ -184,19 +201,23 @@ pub fn build_pipeline_config(
         if let Some(gui_node) = gui_node {
             let cfg = parse_config(&gui_node.data.config);
             let params = get_params(&cfg);
-            let framework = params.get("framework")
+            let framework = params
+                .get("framework")
                 .and_then(|v| v.as_str())
                 .unwrap_or("http.server");
             let gui_port_val = gui_port.unwrap_or(8080);
             port = Some(gui_port_val);
 
-            let env_name = gui_node.data.parent_id
+            let env_name = gui_node
+                .data
+                .parent_id
                 .as_ref()
                 .and_then(|pid| nodes.iter().find(|n| n.id == *pid))
                 .map(|p| {
                     let cfg = parse_config(&p.data.config);
                     let params = get_params(&cfg);
-                    params.get("envName")
+                    params
+                        .get("envName")
                         .and_then(|v| v.as_str())
                         .unwrap_or("nyctus-demo")
                         .to_string()
@@ -205,7 +226,8 @@ pub fn build_pipeline_config(
 
             match framework {
                 "http.server" => {
-                    let serve_dir = params.get("serve_dir")
+                    let serve_dir = params
+                        .get("serve_dir")
                         .and_then(|v| v.as_str())
                         .unwrap_or("/out");
                     steps.push(format!(
@@ -214,9 +236,14 @@ pub fn build_pipeline_config(
                     ));
                 }
                 "streamlit" => {
-                    if let Some(entrypoint) = params.get("entrypoint_script").and_then(|v| v.as_str()) {
+                    if let Some(entrypoint) =
+                        params.get("entrypoint_script").and_then(|v| v.as_str())
+                    {
                         let escaped = b64_encode(entrypoint);
-                        steps.push(format!("echo '{}' | base64 -d > /tmp/dashboard.py", escaped));
+                        steps.push(format!(
+                            "echo '{}' | base64 -d > /tmp/dashboard.py",
+                            escaped
+                        ));
                         steps.push(format!(
                             "micromamba run -n {} streamlit run /tmp/dashboard.py --server.port {} --server.headless true",
                             env_name, gui_port_val
@@ -224,17 +251,26 @@ pub fn build_pipeline_config(
                     }
                 }
                 _ => {
-                    if let Some(entrypoint) = params.get("entrypoint_script").and_then(|v| v.as_str()) {
+                    if let Some(entrypoint) =
+                        params.get("entrypoint_script").and_then(|v| v.as_str())
+                    {
                         let escaped = b64_encode(entrypoint);
                         steps.push(format!("echo '{}' | base64 -d > /tmp/gui.py", escaped));
-                        steps.push(format!("micromamba run -n {} python3 /tmp/gui.py", env_name));
+                        steps.push(format!(
+                            "micromamba run -n {} python3 /tmp/gui.py",
+                            env_name
+                        ));
                     }
                 }
             }
         }
     }
 
-    let cmd = vec!["/bin/bash".to_string(), "-c".to_string(), steps.join(" && ")];
+    let cmd = vec![
+        "/bin/bash".to_string(),
+        "-c".to_string(),
+        steps.join(" && "),
+    ];
 
     Ok(PipelineConfig {
         cmd,
@@ -253,11 +289,15 @@ fn build_data_steps(steps: &mut Vec<String>, node: &Node) {
         params.get("content").and_then(|v| v.as_str()),
         params.get("mount_path").and_then(|v| v.as_str()),
     ) {
-        let dir = mount_path.rsplit_once('/')
+        let dir = mount_path
+            .rsplit_once('/')
             .map(|(d, _)| d.to_string())
             .unwrap_or_else(|| "/data".to_string());
         let escaped = b64_encode(content);
-        steps.push(format!("mkdir -p {} && echo '{}' | base64 -d > {}", dir, escaped, mount_path));
+        steps.push(format!(
+            "mkdir -p {} && echo '{}' | base64 -d > {}",
+            dir, escaped, mount_path
+        ));
     }
 }
 
@@ -293,33 +333,40 @@ fn add_script_execution(steps: &mut Vec<String>, node: &Node, nodes: &[Node]) {
         return;
     }
 
-    let env_name = node.data.parent_id
+    let env_name = node
+        .data
+        .parent_id
         .as_ref()
         .and_then(|pid| nodes.iter().find(|n| n.id == *pid))
         .map(|p| {
             let cfg = parse_config(&p.data.config);
             let params = get_params(&cfg);
-            params.get("envName")
+            params
+                .get("envName")
                 .and_then(|v| v.as_str())
                 .unwrap_or("nyctus-demo")
                 .to_string()
         })
         .unwrap_or_else(|| "nyctus-demo".to_string());
 
-    let env_type = node.data.parent_id
+    let env_type = node
+        .data
+        .parent_id
         .as_ref()
         .and_then(|pid| nodes.iter().find(|n| n.id == *pid))
         .map(|p| {
             let cfg = parse_config(&p.data.config);
             let params = get_params(&cfg);
-            params.get("envType")
+            params
+                .get("envType")
                 .and_then(|v| v.as_str())
                 .unwrap_or("micromamba")
                 .to_string()
         })
         .unwrap_or_else(|| "micromamba".to_string());
 
-    let lang = params.get("language")
+    let lang = params
+        .get("language")
         .and_then(|v| v.as_str())
         .unwrap_or("python");
 
@@ -334,21 +381,33 @@ fn add_script_execution(steps: &mut Vec<String>, node: &Node, nodes: &[Node]) {
         _ => "py",
     };
 
-    steps.push(format!("echo '{}' | base64 -d > /tmp/nyctus_script.{}", escaped, ext));
+    steps.push(format!(
+        "echo '{}' | base64 -d > /tmp/nyctus_script.{}",
+        escaped, ext
+    ));
 
     match env_type.as_str() {
         "bun" => {
             steps.push("export PATH=\"$HOME/.bun/bin:$PATH\"".to_string());
-            steps.push(format!("cd /tmp/bun_{} && bun run /tmp/nyctus_script.{}", env_name, ext));
+            steps.push(format!(
+                "cd /tmp/bun_{} && bun run /tmp/nyctus_script.{}",
+                env_name, ext
+            ));
         }
         "r" => {
-            steps.push(format!("micromamba run -n {} Rscript /tmp/nyctus_script.{}", env_name, ext));
+            steps.push(format!(
+                "micromamba run -n {} Rscript /tmp/nyctus_script.{}",
+                env_name, ext
+            ));
         }
         "bash" => {
             steps.push(format!("bash /tmp/nyctus_script.{}", ext));
         }
         _ => {
-            steps.push(format!("micromamba run -n {} python3 -u /tmp/nyctus_script.{}", env_name, ext));
+            steps.push(format!(
+                "micromamba run -n {} python3 -u /tmp/nyctus_script.{}",
+                env_name, ext
+            ));
         }
     }
 }

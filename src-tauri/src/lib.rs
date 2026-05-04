@@ -1,7 +1,7 @@
 mod container;
 mod nyc;
-mod preflight;
 mod pipeline;
+mod preflight;
 // Proprietary modules removed
 
 use bollard::Docker;
@@ -42,10 +42,7 @@ async fn check_runtime() -> Result<serde_json::Value, String> {
 
 /// Called after preflight confirms runtime is running — initializes bollard client.
 #[tauri::command]
-async fn init_runtime(
-    runtime_kind: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn init_runtime(runtime_kind: String, state: State<'_, AppState>) -> Result<(), String> {
     let kind = if runtime_kind == "Podman" {
         preflight::RuntimeKind::Podman
     } else {
@@ -70,10 +67,7 @@ async fn init_runtime(
 // ── Commands: Container ──────────────────────────────────────────────────────
 
 #[tauri::command]
-async fn pull_base_image(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn pull_base_image(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let guard = state.docker.lock().await;
     let docker = guard.as_ref().ok_or("Runtime not initialised")?;
     container::pull_base_image(docker, &app).await
@@ -105,15 +99,15 @@ async fn deploy_environment(
 }
 
 #[tauri::command]
-async fn kill_environment(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn kill_environment(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let guard = state.docker.lock().await;
     let docker = guard.as_ref().ok_or("Runtime not initialised")?;
 
     let mut cid_guard = state.active_container_id.lock().await;
-    let container_id = cid_guard.as_deref().ok_or("No active container")?.to_string();
+    let container_id = cid_guard
+        .as_deref()
+        .ok_or("No active container")?
+        .to_string();
 
     container::kill_environment(docker, &container_id, &app).await?;
     *cid_guard = None;
@@ -127,30 +121,35 @@ async fn check_gpu_available(runtime_kind: String) -> Result<String, String> {
     // We can test GPU availability by trying to run nvidia-smi quietly in a disposable container.
     // If docker/podman can allocate `--gpus all`, we assume GPU is available.
     // Since we don't want to pull a large image just for checking, we'll first check if the host has nvidia-smi
-    let host_check = std::process::Command::new("nvidia-smi")
-        .output();
-        
+    let host_check = std::process::Command::new("nvidia-smi").output();
+
     if let Ok(output) = host_check {
         if output.status.success() {
             // Also check if docker supports the flag
-            let runtime = if runtime_kind == "Podman" { "podman" } else { "docker" };
+            let runtime = if runtime_kind == "Podman" {
+                "podman"
+            } else {
+                "docker"
+            };
             let test_cmd = std::process::Command::new(runtime)
                 .args(["run", "--rm", "--gpus", "all", "hello-world"])
                 .output();
-                
+
             if let Ok(out) = test_cmd {
                 if out.status.success() {
                     return Ok("Available".to_string());
                 } else {
                     let stderr = String::from_utf8_lossy(&out.stderr).to_lowercase();
-                    if stderr.contains("could not select device driver") || stderr.contains("nvidia") {
+                    if stderr.contains("could not select device driver")
+                        || stderr.contains("nvidia")
+                    {
                         return Ok("ToolkitMissing".to_string());
                     }
                 }
             }
         }
     }
-    
+
     Ok("Unavailable".to_string())
 }
 
@@ -180,7 +179,11 @@ fn build_pipeline_config(
 // ── Commands: OS External Editor ─────────────────────────────────────────────
 
 #[tauri::command]
-fn open_in_os_editor(app: tauri::AppHandle, filename: String, content: String) -> Result<String, String> {
+fn open_in_os_editor(
+    app: tauri::AppHandle,
+    filename: String,
+    content: String,
+) -> Result<String, String> {
     let mut tmp_dir = std::env::temp_dir();
     tmp_dir.push("nyctus_scripts");
     std::fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
@@ -189,13 +192,13 @@ fn open_in_os_editor(app: tauri::AppHandle, filename: String, content: String) -
     std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
 
     let path_str = file_path.to_string_lossy().to_string();
-    
+
     // Tell the OS to open it with the default registered program via Tauri to avoid Windows AppLocker blocking it
     use tauri_plugin_opener::OpenerExt;
     if let Err(e) = app.opener().open_path(&path_str, None::<&str>) {
         return Err(format!("Failed to open in OS editor: {}", e));
     }
-    
+
     Ok(path_str)
 }
 

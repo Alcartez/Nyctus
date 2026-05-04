@@ -50,9 +50,8 @@ pub async fn check_runtime_available() -> RuntimeStatus {
             return RuntimeStatus::StoppedButInstalled(RuntimeKind::Podman);
         }
 
-        let docker_exe = std::path::Path::new(
-            r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
-        );
+        let docker_exe =
+            std::path::Path::new(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe");
         if docker_exe.exists() {
             return RuntimeStatus::StoppedButInstalled(RuntimeKind::Docker);
         }
@@ -65,9 +64,8 @@ pub async fn check_runtime_available() -> RuntimeStatus {
         use tokio::net::UnixStream;
 
         // 1. Try Podman user socket
-        let xdg_runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-            format!("/run/user/{}", unsafe { libc::getuid() })
-        });
+        let xdg_runtime = std::env::var("XDG_RUNTIME_DIR")
+            .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
         let podman_sock = format!("{}/podman/podman.sock", xdg_runtime);
         if UnixStream::connect(&podman_sock).await.is_ok() {
             return RuntimeStatus::Running(RuntimeKind::Podman);
